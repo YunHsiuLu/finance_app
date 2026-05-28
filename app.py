@@ -123,7 +123,7 @@ with col_left:
     
     apply_black_theme(fig_main)
     fig_main.update_layout(height=700, xaxis=dict(matches='x')) # 鎖定座標系聯動
-    st.plotly_chart(fig_main, use_container_width=True, config=chart_config)
+    st.plotly_chart(fig_main, width="stretch", config=chart_config)
 
 with col_right:
     st.subheader("技術分析")
@@ -146,4 +146,4 @@ with col_right:
     
     apply_black_theme(fig_tech)
     fig_tech.update_layout(height=700, showlegend=False)
-    st.plotly_chart(fig_tech, use_container_width=True, config=chart_config)
+    st.plotly_chart(fig_tech, width="stretch", config=chart_config)
