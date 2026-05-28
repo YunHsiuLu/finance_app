@@ -112,7 +112,6 @@ df = get_data(ticker, interval_map).tail(window)
 # 6. 繪圖
 st.title(f"📊 {stock['name']} ({ticker}) 深度分析")
 col_left, col_right = st.columns([2, 1])
-chart_config = {'displayModeBar': False} # 禁用縮放按鈕
 
 with col_left:
     st.subheader("趨勢與均線")
@@ -123,7 +122,7 @@ with col_left:
     
     apply_black_theme(fig_main)
     fig_main.update_layout(height=700, xaxis=dict(matches='x')) # 鎖定座標系聯動
-    st.plotly_chart(fig_main, width="stretch", config=chart_config)
+    st.plotly_chart(fig_main, width="stretch")
 
 with col_right:
     st.subheader("技術分析")
@@ -146,4 +145,4 @@ with col_right:
     
     apply_black_theme(fig_tech)
     fig_tech.update_layout(height=700, showlegend=False)
-    st.plotly_chart(fig_tech, width="stretch", config=chart_config)
+    st.plotly_chart(fig_tech, width="stretch")
