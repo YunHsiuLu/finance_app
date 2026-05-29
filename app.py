@@ -4,62 +4,31 @@ import pandas as pd
 import ta
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import json
 
 # 1. 頁面配置
 st.set_page_config(page_title="專業看盤系統", layout="wide")
 
-# CSS 強制覆蓋
+# CSS 強制覆蓋：使用高對比度純白色文字，並優化 Metric 顯示
 st.markdown("""
     <style>
-    .stApp { background-color: #000000; color: #FFFFFF; font-size: 18px; }
+    .stApp { background-color: #000000; color: #FFFFFF; }
+    /* 強制將 Metric 數值設為純白高對比 */
+    [data-testid="stMetricValue"] { color: #FFFFFF !important; font-size: 32px !important; }
+    [data-testid="stMetricLabel"] { color: #CCCCCC !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 標的資料 (嚴格換行)
-STOCK_CATEGORIES = {
-    "上市熱門": [
-        {'ticker': '^TWII', 'name': '台灣大盤'},
-        {'ticker': '2330.TW', 'name': '台積電'},
-        {'ticker': '2317.TW', 'name': '鴻海'},
-        {'ticker': '2454.TW', 'name': '聯發科'},
-        {'ticker': '2303.TW', 'name': '聯電'},
-        {'ticker': '3034.TW', 'name': '聯詠'},
-        {'ticker': '3260.TWO', 'name': '威剛'},
-        {'ticker': '2603.TW', 'name': '長榮'},
-        {'ticker': '2609.TW', 'name': '陽明'},
-        {'ticker': '2610.TW', 'name': '華航'},
-        {'ticker': '2382.TW', 'name': '廣達'},
-        {'ticker': '2881.TW', 'name': '富邦金'},
-        {'ticker': '3711.TW', 'name': '日月光'},
-        {'ticker': '3008.TW', 'name': '大立光'},
-        {'ticker': '8299.TWO', 'name': '群聯'}
-    ],
-    "熱門 ETF": [
-        {'ticker': '^TWII', 'name': '台灣大盤'},
-        {'ticker': '0050.TW', 'name': '元大50'},
-        {'ticker': '0056.TW', 'name': '元大高股息'},
-        {'ticker': '00878.TW', 'name': '國泰高股息'},
-        {'ticker': '006208.TW', 'name': '富邦台50'},
-        {'ticker': '00919.TW', 'name': '群益00919'},
-        {'ticker': '00929.TW', 'name': '復華00929'},
-        {'ticker': '00712.TW', 'name': '復華富時不動產'},
-        {'ticker': '00713.TW', 'name': '元大00713'},
-        {'ticker': '00981A.TW', 'name': '00981A'}
-    ],
-    "經典美股": [
-        {'ticker': '^IXIC', 'name': '那斯達克'},
-        {'ticker': 'TSM', 'name': '台積電ADR'},
-        {'ticker': 'NVDA', 'name': '輝達 (NVDA)'},
-        {'ticker': 'AMD', 'name': '超微 (AMD)'},
-        {'ticker': 'INTC', 'name': '英特爾'},
-        {'ticker': 'TSLA', 'name': '特斯拉'},
-        {'ticker': 'AAPL', 'name': '蘋果 (AAPL)'},
-        {'ticker': 'MSFT', 'name': '微軟 (MSFT)'},
-        {'ticker': 'GOOGL', 'name': '谷歌 (GOOGL)'},
-        {'ticker': 'QQQ', 'name': '納指100ETF'},
-        {'ticker': 'SOXX', 'name': '費半半導體ETF'}
-    ]
-}
+# 2. 標的資料 (讀取 JSON)
+@st.cache_data
+def load_stocks():
+    try:
+        with open('stocks.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {"錯誤": [{"ticker": "^TWII", "name": "無法讀取 JSON"}]}
+
+STOCK_CATEGORIES = load_stocks()
 
 # 3. 核心函數
 def apply_black_theme(fig):
@@ -69,7 +38,7 @@ def apply_black_theme(fig):
         plot_bgcolor="#000000",
         font=dict(color="#FFFFFF", size=18),
         margin=dict(l=20, r=20, t=30, b=20),
-        hovermode="x unified" # 開啟十字聯動
+        hovermode="x unified"
     )
     fig.update_xaxes(
         gridcolor="#333333", 
@@ -83,10 +52,39 @@ def apply_black_theme(fig):
         showspikes=True, spikecolor="white", spikethickness=1
     )
 
-# 4. 控制面板
+# 4. 控制面板 (加入網路搜尋功能)
 st.sidebar.title("控制面板")
-category = st.sidebar.selectbox("選擇分類", list(STOCK_CATEGORIES.keys()))
-stock = st.sidebar.selectbox("選擇標的", STOCK_CATEGORIES[category], format_func=lambda x: x['name'])
+
+# 建立所有標的扁平化清單供搜尋
+all_stocks = []
+for cat in STOCK_CATEGORIES.values():
+    all_stocks.extend(cat)
+
+search = st.sidebar.text_input("🔍 搜尋標的 (輸入代號/名稱)")
+if search:
+    # 嘗試先從本地搜尋
+    filtered = [s for s in all_stocks if search.lower() in s['name'].lower() or search.upper() in s['ticker'].upper()]
+    
+    if filtered:
+        stock = st.sidebar.selectbox("搜尋結果", filtered, format_func=lambda x: f"{x['name']} ({x['ticker']})")
+    else:
+        # 如果本地找不到，嘗試網路搜尋
+        try:
+            ticker_obj = yf.Ticker(search.upper())
+            info = ticker_obj.info
+            if 'longName' in info:
+                stock = {'ticker': search.upper(), 'name': info['longName']}
+                st.sidebar.success(f"網路搜尋: {info['longName']}")
+            else:
+                st.sidebar.error("找不到標的")
+                stock = all_stocks[0] # 回退到預設
+        except:
+            st.sidebar.error("網路搜尋失敗")
+            stock = all_stocks[0]
+else:
+    category = st.sidebar.selectbox("選擇分類", list(STOCK_CATEGORIES.keys()))
+    stock = st.sidebar.selectbox("選擇標的", STOCK_CATEGORIES[category], format_func=lambda x: x['name'])
+
 ticker = stock['ticker']
 time_frame = st.sidebar.selectbox("時間週期", ["日線 (1d)", "週線 (1wk)", "月線 (1mo)"])
 interval_map = {'日線 (1d)': '1d', '週線 (1wk)': '1wk', '月線 (1mo)': '1mo'}[time_frame]
@@ -108,21 +106,35 @@ def get_data(ticker, interval):
     return df
 
 df = get_data(ticker, interval_map).tail(window)
+latest = df.iloc[-1]
 
 # 6. 繪圖
 st.title(f"📊 {stock['name']} ({ticker}) 深度分析")
+
+# 頂部數據列
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("當前價格", f"{latest['Close']:.2f}")
+m2.metric("開盤", f"{latest['Open']:.2f}")
+m3.metric("最高", f"{latest['High']:.2f}")
+m4.metric("最低", f"{latest['Low']:.2f}")
+
 col_left, col_right = st.columns([2, 1])
+chart_config = {'displayModeBar': False} # 禁用縮放按鈕
 
 with col_left:
     st.subheader("趨勢與均線")
     fig_main = go.Figure()
-    fig_main.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='K線', increasing_line_color='#FF3E3E', decreasing_line_color='#00FF7F'))
+    fig_main.add_trace(go.Candlestick(
+        x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], 
+        name='K線', increasing_line_color='#FF3E3E', decreasing_line_color='#00FF7F',
+        hovertemplate='日期: %{x|%Y-%m-%d}<br>收盤: %{close:.2f}<extra></extra>'
+    ))
     for col, name in [('SMA5','5T'), ('SMA10','10T'), ('SMA20','20T')]:
         fig_main.add_trace(go.Scatter(x=df.index, y=df[col], name=name, line=dict(width=3)))
     
     apply_black_theme(fig_main)
-    fig_main.update_layout(height=700, xaxis=dict(matches='x')) # 鎖定座標系聯動
-    st.plotly_chart(fig_main, width="stretch")
+    fig_main.update_layout(height=700, xaxis=dict(matches='x'))
+    st.plotly_chart(fig_main, width="stretch", config=chart_config)
 
 with col_right:
     st.subheader("技術分析")
@@ -145,4 +157,4 @@ with col_right:
     
     apply_black_theme(fig_tech)
     fig_tech.update_layout(height=700, showlegend=False)
-    st.plotly_chart(fig_tech, width="stretch")
+    st.plotly_chart(fig_tech, width="stretch", config=chart_config)
