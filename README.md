@@ -10,4 +10,19 @@
 ```pip install -r requirements.txt```
 
 下載完畢後，確認是否可以使用streamlit
-測試streamlit：`streamlit --version`
+測試streamlit：`streamlit --version`，應該會回傳以下資訊：`Streamlit, version 1.57.0`
+
+使用streamlit：
+```
+/> streamlit run app.py
+2026-05-29 10:53:32.132 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://X.X.X.X:8501
+```
+通常預設port是8501，當然可以自行修改
+```
+streamlit run app.py --server.port [port number]
+```
