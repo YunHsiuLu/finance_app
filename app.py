@@ -9,26 +9,74 @@ import json
 # 1. 頁面配置
 st.set_page_config(page_title="專業看盤系統", layout="wide")
 
-# 2. CSS 精簡設定：移除白色區塊，確保文字正常顯示
+# 2. 頁面樣式
 st.markdown("""
     <style>
-    /* 移除背景顏色，設定為純黑 */
-    .stApp { background-color: #000000; }
-    
-    /* 確保標題正常且不被擠出 */
-    h1 { color: #FFFFFF !important; font-size: 24px !important; margin-bottom: 0.5rem !important; }
-    
-    /* 緊湊容器，保留適當邊距防切邊 */
-    .block-container { 
-        padding-top: 1rem !important; 
+    html,
+    body,
+    .stApp,
+    [data-testid="stAppViewContainer"] {
+        background-color: #000000;
+    }
+
+    /* Streamlit 的固定 header 會蓋住內容，背景也必須與主畫面一致。 */
+    header[data-testid="stHeader"] {
+        background-color: #000000;
+    }
+
+    h1 {
+        color: #FFFFFF !important;
+        font-size: 24px !important;
+        line-height: 1.35 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .block-container {
+        padding-top: 4.5rem !important;
         padding-bottom: 0rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
     }
-    
-    /* Metric 優化 */
-    [data-testid="stMetricValue"] { color: #FFFFFF !important; font-size: 18px !important; }
-    [data-testid="stMetricLabel"] { color: #CCCCCC !important; font-size: 12px !important; }
+
+    /* 側邊欄改為深色底，避免標題與欄位標籤失去對比。 */
+    section[data-testid="stSidebar"] {
+        background-color: #151A23;
+        border-right: 1px solid #303846;
+    }
+
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span {
+        color: #F4F7FB !important;
+    }
+
+    section[data-testid="stSidebar"] input {
+        color: #FFFFFF !important;
+        background-color: #242B36 !important;
+    }
+
+    section[data-testid="stSidebar"] [data-baseweb="input"],
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div {
+        color: #FFFFFF !important;
+        background-color: #242B36 !important;
+        border-color: #4A5568 !important;
+    }
+
+    section[data-testid="stSidebar"] svg {
+        fill: #DCE3EC !important;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: #FFFFFF !important;
+        font-size: 18px !important;
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: #CCCCCC !important;
+        font-size: 12px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -49,12 +97,42 @@ def apply_black_theme(fig):
         template="plotly_dark",
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
-        font=dict(color="#FFFFFF", size=12),
+        font=dict(color="#FFFFFF", size=12, family="Arial, sans-serif"),
         margin=dict(l=10, r=10, t=20, b=10),
-        hovermode="x unified"
+        hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor="#1B2330",
+            bordercolor="#5F6B7A",
+            font=dict(color="#FFFFFF", size=12)
+        ),
+        legend=dict(
+            font=dict(color="#FFFFFF", size=12),
+            bgcolor="rgba(0, 0, 0, 0.65)",
+            bordercolor="#3A4554",
+            borderwidth=1
+        )
     )
-    fig.update_xaxes(showspikes=True, spikecolor="white", spikethickness=1, rangebreaks=[dict(bounds=["sat", "mon"])])
-    fig.update_yaxes(showspikes=True, spikecolor="white", spikethickness=1)
+    fig.update_xaxes(
+        color="#FFFFFF",
+        tickfont=dict(color="#E6EAF0", size=11),
+        gridcolor="#3A3F48",
+        zerolinecolor="#59616D",
+        linecolor="#AAB2BD",
+        showspikes=True,
+        spikecolor="#FFFFFF",
+        spikethickness=1,
+        rangebreaks=[dict(bounds=["sat", "mon"])]
+    )
+    fig.update_yaxes(
+        color="#FFFFFF",
+        tickfont=dict(color="#E6EAF0", size=11),
+        gridcolor="#3A3F48",
+        zerolinecolor="#59616D",
+        linecolor="#AAB2BD",
+        showspikes=True,
+        spikecolor="#FFFFFF",
+        spikethickness=1
+    )
 
 # 5. 控制面板與數據處理
 st.sidebar.title("控制面板")
@@ -106,16 +184,98 @@ with col_left:
     st.plotly_chart(fig_main, width="stretch", config=chart_config)
 
 with col_right:
-    fig_tech = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05)
+    fig_tech = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.12,
+        subplot_titles=(opt_top, opt_bot)
+    )
+
     def add_tech(fig, opt, row):
         if opt == "MACD":
-            fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='DIF', line=dict(color='yellow', width=2)), row=row, col=1)
-            fig.add_trace(go.Bar(x=df.index, y=df['MACD']-df['Signal'], name='Hist', marker_color='#FF3E3E'), row=row, col=1)
+            histogram = df['MACD'] - df['Signal']
+            colors = ['#FF5A5F' if value >= 0 else '#00D084' for value in histogram]
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index,
+                    y=df['MACD'],
+                    name='DIF',
+                    line=dict(color='#FFD54F', width=2)
+                ),
+                row=row,
+                col=1
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index,
+                    y=df['Signal'],
+                    name='Signal',
+                    line=dict(color='#4FC3F7', width=1.5)
+                ),
+                row=row,
+                col=1
+            )
+            fig.add_trace(
+                go.Bar(
+                    x=df.index,
+                    y=histogram,
+                    name='柱狀體',
+                    marker_color=colors
+                ),
+                row=row,
+                col=1
+            )
         elif opt == "KD":
-            fig.add_trace(go.Scatter(x=df.index, y=df['K'], name='K值', line=dict(color='magenta', width=2)), row=row, col=1)
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index,
+                    y=df['K'],
+                    name='K值',
+                    line=dict(color='#FF4DFF', width=2)
+                ),
+                row=row,
+                col=1
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index,
+                    y=df['D'],
+                    name='D值',
+                    line=dict(color='#4FC3F7', width=1.5)
+                ),
+                row=row,
+                col=1
+            )
+        elif opt == "VOL":
+            colors = [
+                '#FF5A5F' if close >= open_price else '#00D084'
+                for close, open_price in zip(df['Close'], df['Open'])
+            ]
+            fig.add_trace(
+                go.Bar(
+                    x=df.index,
+                    y=df['Volume'],
+                    name='成交量',
+                    marker_color=colors
+                ),
+                row=row,
+                col=1
+            )
     
     add_tech(fig_tech, opt_top, 1)
     add_tech(fig_tech, opt_bot, 2)
     apply_black_theme(fig_tech)
-    fig_tech.update_layout(height=450, showlegend=False)
+    fig_tech.update_annotations(
+        font=dict(color="#FFFFFF", size=15, family="Arial, sans-serif"),
+        bgcolor="#1B2330",
+        bordercolor="#5F6B7A",
+        borderwidth=1,
+        borderpad=4
+    )
+    fig_tech.update_layout(
+        height=450,
+        margin=dict(l=15, r=10, t=45, b=10),
+        showlegend=False
+    )
     st.plotly_chart(fig_tech, width="stretch", config=chart_config)
