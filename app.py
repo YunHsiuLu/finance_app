@@ -149,6 +149,7 @@ ticker, time_frame = stock['ticker'], st.sidebar.selectbox("週期", ["日線 (1
 interval_map = {'日線 (1d)': '1d', '週線 (1wk)': '1wk', '月線 (1mo)': '1mo'}[time_frame]
 window = st.sidebar.slider("視窗筆數", 20, 500, 100)
 opt_top, opt_bot = st.sidebar.selectbox("右上指標", ["MACD", "KD", "VOL", "無"]), st.sidebar.selectbox("右下指標", ["KD", "MACD", "VOL", "無"])
+show_intraday = st.sidebar.toggle("顯示今日走勢圖", value=True)
 
 @st.cache_data(ttl=600)
 def get_data(ticker, interval):
@@ -159,6 +160,24 @@ def get_data(ticker, interval):
     kd = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close'])
     df['K'], df['D'] = kd.stoch(), kd.stoch_signal()
     return df
+
+
+@st.cache_data(ttl=60)
+def get_intraday_data(ticker):
+    """取得 Yahoo Finance 的當日一分鐘分時資料。"""
+    df = yf.Ticker(ticker).history(
+        period="1d", interval="1m", auto_adjust=False, prepost=False
+    )
+    if df.empty:
+        return df
+
+    # Yahoo 回傳的時區依標的而異，統一換算為台灣日期，避免休市時顯示前一交易日資料。
+    if df.index.tz is not None:
+        intraday_dates = df.index.tz_convert("Asia/Taipei").date
+    else:
+        intraday_dates = df.index.date
+    today_taipei = pd.Timestamp.now(tz="Asia/Taipei").date()
+    return df[intraday_dates == today_taipei]
 
 df = get_data(ticker, interval_map).tail(window)
 latest = df.iloc[-1]
@@ -172,8 +191,76 @@ m2.metric("開盤", f"{latest['Open']:.2f}")
 m3.metric("最高", f"{latest['High']:.2f}")
 m4.metric("最低", f"{latest['Low']:.2f}")
 
-col_left, col_right = st.columns([2, 1])
 chart_config = {'displayModeBar': False}
+
+if show_intraday:
+    st.subheader("今日走勢圖")
+    intraday_df = get_intraday_data(ticker)
+
+    if intraday_df.empty:
+        st.info("目前沒有可用的當日分時資料，可能尚未開盤、今日休市，或資料來源暫時未提供。")
+    else:
+        opening_price = intraday_df.iloc[0]['Open']
+        latest_intraday = intraday_df.iloc[-1]
+        intraday_change = latest_intraday['Close'] - opening_price
+        intraday_change_pct = intraday_change / opening_price * 100
+        trend_color = '#FF5A5F' if intraday_change >= 0 else '#00D084'
+        volume_colors = [
+            '#FF5A5F' if close >= open_price else '#00D084'
+            for close, open_price in zip(intraday_df['Close'], intraday_df['Open'])
+        ]
+
+        fig_intraday = make_subplots(
+            rows=2,
+            cols=1,
+            shared_xaxes=True,
+            row_heights=[0.75, 0.25],
+            vertical_spacing=0.04
+        )
+        fig_intraday.add_trace(
+            go.Scatter(
+                x=intraday_df.index,
+                y=intraday_df['Close'],
+                mode='lines',
+                name='成交價',
+                line=dict(color=trend_color, width=2.5),
+                hovertemplate='時間：%{x|%H:%M}<br>價格：%{y:.2f}<extra></extra>'
+            ),
+            row=1,
+            col=1
+        )
+        fig_intraday.add_hline(
+            y=opening_price,
+            line_dash='dot',
+            line_color='#AAB2BD',
+            annotation_text='開盤價',
+            annotation_position='top left',
+            row=1,
+            col=1
+        )
+        fig_intraday.add_trace(
+            go.Bar(
+                x=intraday_df.index,
+                y=intraday_df['Volume'],
+                name='成交量',
+                marker_color=volume_colors,
+                hovertemplate='時間：%{x|%H:%M}<br>成交量：%{y:,}<extra></extra>'
+            ),
+            row=2,
+            col=1
+        )
+        apply_black_theme(fig_intraday)
+        fig_intraday.update_layout(
+            height=430,
+            showlegend=False,
+            title=f"當日漲跌：{intraday_change:+.2f}（{intraday_change_pct:+.2f}%）"
+        )
+        fig_intraday.update_xaxes(tickformat='%H:%M', row=2, col=1)
+        fig_intraday.update_yaxes(title_text='價格', row=1, col=1)
+        fig_intraday.update_yaxes(title_text='成交量', row=2, col=1)
+        st.plotly_chart(fig_intraday, width="stretch", config=chart_config)
+
+col_left, col_right = st.columns([2, 1])
 
 with col_left:
     fig_main = go.Figure()
